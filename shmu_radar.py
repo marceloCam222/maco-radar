@@ -79,7 +79,8 @@ def read_odim(raw: bytes):
     with h5py.File(io.BytesIO(raw), "r") as f:
         ds = f["dataset1"]
         data_grp = ds["data1"] if "data1" in ds else ds
-        arr = data_grp["data"][()].astype(np.float64)
+        raw_arr = data_grp["data"][()]
+        arr = raw_arr.astype(np.float64)
         w_data = data_grp.get("what")
         w_ds = ds.get("what")
         def what(name, default):
@@ -94,7 +95,12 @@ def read_odim(raw: bytes):
             mask |= arr == float(nodata)
         if undetect is not None:
             mask |= arr == float(undetect)
+        # Mimo dosahu radarov má SHMÚ najvyššiu hodnotu typu (napr. 255). Nie vždy je uvedená ako nodata,
+        # preto ju skryjeme vždy, aj všetko nad 80 dBZ (to v prírode nebýva).
+        if np.issubdtype(raw_arr.dtype, np.integer):
+            mask |= raw_arr == np.iinfo(raw_arr.dtype).max
         dbz = arr * gain + offset
+        mask |= (dbz > 80) | ~np.isfinite(dbz)
         dbz[mask] = np.nan
 
         where = f["where"]
